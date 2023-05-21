@@ -1,0 +1,364 @@
+---
+title: "Poisson Regression in R"
+author: "Julian"
+date: "2023-05-21"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+## 1. The Poisson distribution
+
+We often use the Poisson distribution to model count data. If $Y \sim Poi(\lambda)$ with $\lambda > 0$, then the PMF is given by
+
+$$
+P(Y = y) = \frac{\lambda^{y}  e^{- \lambda}}{y!}, \ \ \ y = 0,1,2,...$$
+
+
+In addition, for Poisson distributed random variables, we have that $E[Y] = var(Y) = \lambda$. Eventually, we have that $\sum_{i=1}^{n} y_{i} \sim Poi(\sum_{i=1}^{n} \lambda_{i})$. The code below shows how to draw the first plot on the next page.
+
+```{r libraries, include=FALSE}
+library(tidyverse)
+library(gridExtra)
+```
+
+```{r codeforplot1, include=TRUE}
+set.seed(2023)
+s1 <- data.frame('data' = rpois(n = 1000, lambda = 0.5))
+s2 <- data.frame('data' = rpois(n = 1000, lambda = 2))
+s3 <- data.frame('data' = rpois(n = 1000, lambda = 10))
+
+p1 <- s1 %>% ggplot() +
+  geom_bar(aes(x = data, y = stat(count / sum(count))), width = 0.5,
+               fill = 'firebrick3') +
+  labs(x = 'y', y = 'proportion', title = lambda~ '= 0.5') +
+  theme_minimal()
+  scale_color_gradient(low="firebrick1", high="firebrick4")
+p2 <- s2 %>% ggplot() +
+  geom_bar(aes(x = data, y = stat(count / sum(count))), width = 0.75,
+           fill = 'firebrick3') +
+  labs(x = 'y', y = 'proportion', title = lambda~ '= 2') +
+  theme_minimal()
+p3 <- s3 %>% ggplot() +
+  geom_bar(aes(x = data, y = stat(count / sum(count))), width = 0.75,
+           fill = 'firebrick3') +
+  labs(x = 'y', y = 'proportion', title = lambda~ '= 10') +
+  theme_minimal()
+```
+
+Finally we can plot different artificially generated Poisson distributed data.
+
+```{r plot1, include=TRUE}
+grid.arrange(p1, p2, p3, nrow = 1)
+```
+
+
+## 2. Poisson regression model
+
+Consider $n$ independent observations $y_{1},...,y_{n}$ for which we assume a Poisson distribution conditionally on a set of $p$ categorical or numerical covariates $x_{j}$, for $j = 1,..., p$. The model is given by
+
+$$
+ln \bigg( E[y_{i} \mid x_{i}] \bigg) = { \color{purple} ln \big( \lambda_{i} \big) }= \beta_{0} + \beta_{1} x_{i1} + ... + \beta_{p} x_{ip} = \bold{x}_{i}^{T} \boldsymbol{\beta}
+$$
+
+
+with $i = 1,..., n$, with $\bold{x}_{i}^{T} = (1, x_{i1}, ..., x_{ip})^{T}$ and $\boldsymbol{\beta} = ( \beta_{0} ,...,  \beta_{p})$. 
+
+
+The  natural link function is the log link. It ensures that $\lambda_{i} \geq 0$. It follows that
+
+$$
+E \big[ y_{i} \mid x_{i} \big] =\lambda_{i} = e^{\beta_{0} + \beta_{1} x_{i1} + ... + \beta_{p} x_{ip}} = e^{ \bold{x}_{i}^{T} \boldsymbol{\beta}}
+$$
+
+The Poisson GLM is suitable for modeling count data as response variable $Y$ when a set of assumptions are met.
+
+
+## 3. Parameter estimation
+
+
+The log-likelihood function is given by
+
+$$
+l( \bold{y},  \boldsymbol{\beta}) = \sum_{i=1}^{n} \bigg( y_{i}  \bold{x}_{i}^{T} \boldsymbol{\beta} - e^{\bold{x}_{i}^{T} \boldsymbol{\beta}}  - ln(y_{i}!)      \bigg)
+$$
+
+
+Differentiating with respect to $\boldsymbol{\beta}$ and setting the new function equal to $0$ yields the ***Maximum Likelihood equations***
+
+$$
+ \sum_{i=1}^{n}  \big(y_{i} - e^{\bold{x}_{i}^{T} \boldsymbol{\beta}} \big) x_{ij} = 0
+$$
+
+with $j = 0,..., p$ and $x_{i0} = 1.
+
+
+There is no closed-form solution for the Maximum Likelihood equations. We therefore have to resort to numerical optimization, for example the  Iteratively Weighted Least Squares (IWLS) algorithm or the Newton-Raphson algorithm to obtain estimates of the regression coefficients.
+
+
+## 4. Model assumptions
+
+(i) \ \ \textbf{Count response}: The response variable is a count (non-negative integers), i.e. the number of times an event occurs in an homogeneous time interval or a given space (e.g. the number of goal scored during a football game). It is suitable for grouped or ungrouped data since the sum of Poisson distributed observations is also Poisson. When the reponse is a category (a ranking), we should consider a Multinomial GLM instead.
+
+(ii) \ \ \textbf{Independent events}: The counts, i.e. the events, are assumed to be independent of each other. When this assumption does not hold, we should consider a Generalized Linear Mixed Model (GLMM) instead.
+
+
+(iii) \ \ \textbf{Constant variance}: The factors affecting the mean are also affecting the variance. The variance is assumed to be equal to the mean. When this assumption does not hold, we should consider a Quasipoisson GLM for overdispersed (or underdispersed) data or a Negative Binomial GLM instead.
+
+
+## 5. Parameter interpretation
+
+
+(i) \ \ $\beta_{0}$ represents the change in the log of the mean when all covariates $x_{j}$ are equal to 0. Thus $e^{\beta_{0}}$ represents the change in the mean.
+
+
+(ii) \ \ $\beta_{j}$, for $j >0$ represents the change in the log of the mean when $x_{j}$ increases by one unit and all other covariates are held constant. Thus $e^{\beta_{j}}$ represents the change in the mean.
+
+## 6. Practical example using the 'Affairs' dataset
+
+We will fit a Poisson regression model to a subset of the 'Affairs' dataset (after W. H. Greene).
+
+
+There are $n= 20$ observations  and $8$ variables in the reduced dataset. The variable 'affairs' is the number of extramarital affairs in the past year and is our response variable. We will include as covariates the variables 'gender', 'age', 'yearsmarried', 'children', 'religiousness', 'education' and 'rating' in our analysis. 'religiousness' ranges from $1$ (anti) to $5$ (very) and 'rating' is a self rating of the marriage, ranging from $1$ (very unhappy) to $5$ (very happy).
+
+
+```{r affairs, include=TRUE}
+data(Affairs, package = 'AER')
+set.seed(2023)
+data <- Affairs[sample(nrow(Affairs), size = 20, replace = FALSE),-c(8)]
+head(data)
+
+dim(data)
+
+class(data)
+
+```
+
+## 7. Fitted Poisson model
+
+
+```{r pmodel, include=TRUE}
+# Poisson model
+poisson.model <- glm(affairs ~ .,
+                     family = 'poisson', data = data)
+summary(poisson.model)
+```
+
+## 8. Deviance and goodness-of-fit
+
+The \textbf{deviance} of the model (also called G-statistic)  is given by
+
+$$
+D_{model} = 2 \sum_{i=1}^{n} \bigg( y_{i} ln\bigg( \frac{y_{i}}{\hat{\lambda}_{i}} \bigg) - (y_{i} - \hat{\lambda}_{i}) \bigg)
+$$
+
+where $\hat{\lambda}_{i} =  e^{ \bold{x}_{i}^{T} \boldsymbol{\hat{\beta}}}$ is the fitted value of $\lambda_{i}$.
+
+
+The deviance can be used as a goodness-of-fit test. We test $H_{0}$: 'The model is appropriate' versus $H_{1}$: 'The model is not appropriate'. Under $H_{0}$, we have that
+
+$$
+D_{model} \sim \chi_{1-\alpha, n-(p+1)}^{2}
+$$
+
+
+where $p+1$ is the number of parameters of the model and $1-\alpha$ is a quantile of the $\chi^{2}$ distribution.
+
+
+```{r resid, include=TRUE}
+# p-value of Residual deviance goodness-of-fit test
+1 - pchisq(deviance(poisson.model), df = poisson.model$df.residual)
+```
+Our model does not fit the data very well.} Since our p-value is $0.085$, $H_{0}$ is just not rejected.
+
+## 9. Pearson goodness-of-fit
+
+The ***Pearson goodness-of-fit statistic***  is given by
+
+$$
+X^{2} = \sum_{i=1}^{n} \frac{(y_{i} -\hat{ \lambda}_{i})^{2}}{\hat{\lambda}_{i}}
+$$
+
+where $\hat{\lambda}_{i} =  e^{ \bold{x}_{i}^{T} \boldsymbol{\hat{\beta}}}$ is the fitted value of $\lambda_{i}$.
+
+
+ We test $H_{0}$: 'The model is appropriate' versus $H_{1}$: 'The model is not appropriate'. Under $H_{0}$, we have that
+
+$$
+X^{2} \sim \chi_{1-\alpha, n-(p+1)}^{2}
+$$
+
+where $p+1$ is the number of parameters of the model and $1-\alpha$ is a quantile of the $\chi^{2}$ distribution.
+
+
+```{r gof, include=TRUE}
+# Pearson's goodness-of-fit
+Pearson <- sum((data$affairs - poisson.model$fitted.values)^2 
+               / poisson.model$fitted.values)
+1 - pchisq(Pearson, df = poisson.model$df.residual)
+```
+
+The fit is not much better. Our p-value is $0.1054$ and $H_{0}$ is not rejected.
+
+
+## 10. Checking $E[Y] = var(Y)$ assumption
+
+The variance of $y_{i}$ is approximated by $(y_{i} - \hat{\lambda}_{i})^{2}$. From the first graph we can see that the range of the variance differs from the range of the mean. Moreover, from the second graph, we see that the residuals show some kind of pattern. ***$E[Y] = var(Y)$ seems not to hold***. Let us examine the dispersion of the data and try a Quasipoisson in case of overdispersion.
+
+
+```{r quasip, include=TRUE}
+lambdahat <-fitted(poisson.model)
+par(mfrow=c(1,2), pty="s")
+plot(lambdahat,(data$affairs-lambdahat)^2,
+     xlab=expression(hat(lambda)), ylab=expression((y-hat(lambda))^2 ))
+plot(lambdahat, resid(poisson.model,type="pearson"), 
+     xlab=expression(hat(lambda)), ylab="Pearson Residuals") 
+```
+
+
+## 11. Assessing overdispersion
+
+The variance of $Y$ must be somewhat proportional to its mean. We can write
+
+$$
+var(Y) = E[Y] = { \color{purple} \phi} \lambda
+$$
+
+where $\phi$ is a scale parameter of dispersion and is equal to $1$ if the equality $E[Y] = var(Y)$ holds. If $\phi > 1$, the data are \textbf{overdispersed} and if $\phi < 1$, the data are underdispersed. If a Poisson model is fitted under overdispersion of the response, then the standard errors of the estimated coefficients are underestimated. The scale parameter $\phi$ can be estimated as
+
+$$
+\hat{\phi} = \frac{\sum_{i=1}^{n} \frac{(y_{i} -\hat{ \lambda}_{i})^{2}}{\hat{\lambda}_{i}}}{n-(p+1)} = \frac{X^{2}}{n-(p+1)}
+$$
+
+
+```{r edp, include=TRUE}
+# Estimated dispersion parameter
+Pearson / poisson.model$df.residual
+```
+
+The dispersion parameter is roughly equal to $1.53$ for our data. Let us try a Quasipoisson regression model.
+
+
+## 12. Fitted Quasipoisson model
+
+The fitted Quasipoison model yields the following R output. However, the fit seems not to have improved based on the deviance goodness-of-fit test.
+
+```{r qpm, include=TRUE}
+# Quasipoisson model
+quasipoisson.model <- glm(affairs ~ .,
+                          family = 'quasipoisson', data = data)
+summary(quasipoisson.model)
+
+# p-value of Residual deviance goodness-of-fit test
+1 - pchisq(deviance(quasipoisson.model), df = quasipoisson.model$df.residual)
+```
+
+## 13. Variable selection using BIC
+
+Some variables may not be relevant to the model or have low explanatory power. \textbf{Stepwise model selection} provides one possible solution to select our covariates based on Akaike Information Criterion (AIC) or Bayesian Information Criterion (BIC) reduction (not available for Quasipoisson models).
+
+```{r bic, include=TRUE}
+# variable selection using BIC
+library(MASS)
+stepAIC(poisson.model, direction = 'both', k = log(dim(data)[1]))
+# Step:  AIC=61.42
+# affairs ~ yearsmarried + children + religiousness + rating
+# 
+#                 Df Deviance    AIC
+# <none>               20.753 61.423
+# + age            1   19.461 63.128
+# - children       1   25.501 63.176
+# + gender         1   19.879 63.546
+# + education      1   20.750 64.417
+# - yearsmarried   1   32.187 69.862
+# - religiousness  1   32.965 70.640
+# - rating         1   57.142 94.817
+```
+
+It appears that the variables  'yearsmariried', 'children', 'religiousness' and 'rating' are the most relevant to our analysis. The next step is to select the best Quasipoisson model between one including all covariates and one for which only those four covariates are incorporated in the model.
+
+
+
+## 14. Model selection using Crossvalidation
+
+We will select the best model in terms of predictions using leave-one-out Crossvalidation (LOOCV). The model with the lowest Root Mean Squared Error (RMSE) will be preferred. 
+
+```{r loocv, include=TRUE}
+# Leave-one-out crossvalidation (LOOCV)
+pred.cv.mod_1 <- pred.cv.mod_2 <- numeric(dim(data)[1])
+for(i in 1:dim(data)[1]) {
+  mod_1 = glm(affairs ~ .,
+              family = 'quasipoisson', data = data, subset = -i)
+  mod_2 = glm(affairs ~ children + yearsmarried + religiousness + rating,
+              family = 'quasipoisson', data = data, subset = -i)
+  pred.cv.mod_1[i] = predict.glm(mod_1, data[i,], type = 'response' )
+  pred.cv.mod_2[i] = predict.glm(mod_2, data[i,], type = 'response')
+}
+
+error.mod_1 = (1/dim(data)[1]) * sum((data$affairs - pred.cv.mod_1)^2) 
+error.mod_2 = (1/dim(data)[1]) * sum((data$affairs - pred.cv.mod_2)^2) 
+
+# Root Mean Squared Error (RMSE)
+sqrt(c(error.mod_1, error.mod_2))
+
+```
+
+Clearly, the model with four covariates yields better predictions than the complete model and should be preferred. However, the RMSE remains relatively large indicating potential outliers in the dataset.
+
+
+## 15. Diagnostic plots
+
+```{r dp, include=TRUE}
+# Diagnostic plots
+quasipoisson.model.2 <- stepAIC(poisson.model, direction = 'both', k = log(dim(data)[1]))
+
+par(mfrow = c(2,3))
+plot(quasipoisson.model.2, which = 1:6)
+```
+
+Based on the Cook's distance, the observation $1218$ appears to be atypical and have a strong influence on the parameter estimates as well as on the predictions. This observation should be removed.
+
+
+## 16 Our final model
+
+
+```{r fn, include=TRUE}
+# Final model
+# 10. Remove outlier
+round(cooks.distance(quasipoisson.model.2)) # observation 1218 is atypical
+data2 <- data[ - which.max(round(cooks.distance(quasipoisson.model.2))), ]
+
+quasipoisson.model.3 = glm(affairs ~ children + yearsmarried + religiousness + rating,
+              family = 'quasipoisson', data = data2, maxit = 100)
+summary(quasipoisson.model.3)
+
+
+# p-value of Residual deviance goodness-of-fit test
+1 - pchisq(deviance(quasipoisson.model.3), df = quasipoisson.model.3$df.residual)
+
+# Pearson's goodness-of-fit
+Pearson <- sum((data2$affairs - quasipoisson.model.3$fitted.values)^2 
+               / quasipoisson.model.3$fitted.values)
+1 - pchisq(Pearson, df = quasipoisson.model.3$df.residual)
+```
+
+Once the outlier has be removed, the fit is much better and the standard errors are much lower compared to the parameter estimates. This is our best model.
+
+
+## 17. Conclusions
+
+(i) \ \ The problems of overdispersion, covariate selection and influence of outliers have been addressed. Our final Quasipoisson model is a good fit for the data. About $86 \%$ of the deviance is explained by the model.
+
+
+(ii) \ \ The level of religiousness and the number of years of marriage seem to be positively related to the average number of affairs, whereas having children and a happy self rated marriage seem to be negatively related to the average number of affairs. Caution however since the dataset only contains 19 observations.
+
+
+(iii) \ \ If an individual has one child or more, the change in the mean response given all other covariates held constant is  $e^{-2.75} \approx 0.064$, hence a decrease of $93.6 \%$ of the average number of affairs in the past year.
+
+
+(iv) \ \ For one more year of marriage, the change in the mean response given all other covariates held constant is  $e^{0.304} \approx 1.36$, hence an increase of $36 \%$ of the average number of affairs in the past year.
+
+
+(v) \ \ When the self rating of the marriage changes from unhappy to happy, the change in the mean response given all other covariates held constant is  $e^{-2.034} \approx 0.13$, hence a decrease of $87 \%$ of the average number of affairs in the past year.
+
